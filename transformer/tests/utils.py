@@ -4,7 +4,7 @@ import torch
 
 class AttentionMockData(BaseModel):
     """Configuration for single query attention.
-
+    
     d_attn should be evenly divisible by n_head
     """
 
@@ -12,10 +12,11 @@ class AttentionMockData(BaseModel):
     l_z: int = Field(3, description="Context sequence length (keys/values).")
     d_x: int = Field(4, description="Dimension of primary embeddings.")
     d_z: int = Field(5, description="Dimension of context embeddings.")
-    d_attn: int = Field(6, description="Dimension of attention vectors (queries/keys).")
+    d_attn: int = Field(6, description="Dimension of attention for each head (queries/keys).")
     d_out: int = Field(7, description="Dimension of output vectors (values).")
     batch_size: int = Field(1, description="Batch size for queries, keys, and values.")
     n_head: int = Field(1, description="Number of attention heads.")
+
 
     def get_rand_qkv(self):
         shape_q = (self.batch_size, self.n_head, self.l_x, self.d_attn)
@@ -38,3 +39,4 @@ class AttentionMockData(BaseModel):
         values = torch.randn(self.batch_size, self.n_head, self.l_z, self.d_out)
 
         return queries, keys, values
+
