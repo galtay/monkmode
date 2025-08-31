@@ -211,8 +211,8 @@ def multi_head_attention(
     assert values.shape[1] == l_z
     d_out = values.shape[2]
 
-    # einsum 2-d matrix multiplication is ik,kj -> i,j
-    # transposed matrix multiplication is ik,jk -> i,j
+    # einsum 2-d matrix multiplication is ik,kj -> ij
+    # transposed matrix multiplication is ik,jk -> ij
 
     scores = torch.einsum("nqd,nkd->nqk", queries, keys) / math.sqrt(d_attn)
     assert scores.shape == (n_head, l_x, l_z)
@@ -273,8 +273,8 @@ def batch_multi_head_attention(
     assert values.shape[2] == l_z
     d_out = values.shape[3]
 
-    # einsum 2-d matrix multiplication is ik,kj -> i,j
-    # transposed matrix multiplication is ik,jk -> i,j
+    # einsum 2-d matrix multiplication is ik,kj -> ij
+    # transposed matrix multiplication is ik,jk -> ij
 
     scores = torch.einsum("bnqd,bnkd->bnqk", queries, keys) / math.sqrt(d_attn)
     assert scores.shape == (bsz, n_head, l_x, l_z)
