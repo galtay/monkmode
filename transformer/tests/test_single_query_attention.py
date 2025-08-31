@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from transformer.layers import single_query_attention
+from transformer.attn_layers import single_query_attention
 from transformer.exceptions import FullyMaskedQueryError
 from tests.utils import AttentionMockData
 

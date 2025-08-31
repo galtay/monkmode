@@ -2,7 +2,7 @@ import pytest
 import torch
 from torch.nn.functional import scaled_dot_product_attention
 
-from transformer.layers import single_head_attention
+from transformer.attn_layers import single_head_attention
 from transformer.exceptions import FullyMaskedQueryError
 from tests.utils import AttentionMockData
 
