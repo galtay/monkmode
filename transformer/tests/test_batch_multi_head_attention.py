@@ -18,7 +18,7 @@ def test_attn_sums_to_one():
 
 
 def test_masked_position_has_zero_attention():
-    amd = AttentionMockData(n_head=2)
+    amd = AttentionMockData(batch_size=3, n_head=2)
     queries, keys, values = amd.get_rand_qkv()
 
     mask = torch.zeros((amd.batch_size, amd.n_head, amd.l_x, amd.l_z))
@@ -28,7 +28,7 @@ def test_masked_position_has_zero_attention():
 
 
 def test_uniform_scores_give_uniform_attention():
-    amd = AttentionMockData(n_head=2)
+    amd = AttentionMockData(batch_size=3, n_head=2)
     queries, keys, values = amd.get_const_qk()
 
     result = batch_multi_head_attention(queries, keys, values)
@@ -38,7 +38,7 @@ def test_uniform_scores_give_uniform_attention():
 
 
 def test_fully_masked_query_raises_error():
-    amd = AttentionMockData(n_head=2)
+    amd = AttentionMockData(batch_size=3, n_head=2)
     queries, keys, values = amd.get_rand_qkv()
 
     mask = torch.zeros((amd.batch_size, amd.n_head, amd.l_x, amd.l_z))
@@ -48,7 +48,7 @@ def test_fully_masked_query_raises_error():
 
 
 def test_against_pytorch_sdpa():
-    amd = AttentionMockData(n_head=2)
+    amd = AttentionMockData(batch_size=3, n_head=2)
     queries, keys, values = amd.get_rand_qkv()
 
     result = batch_multi_head_attention(queries, keys, values)
@@ -61,8 +61,31 @@ def test_against_pytorch_sdpa():
     assert torch.allclose(result["output"], expected, atol=1e-5)
 
 
+def test_against_pytorch_sdpa_with_mask():
+    amd = AttentionMockData(batch_size=3, n_head=2)
+    queries, keys, values = amd.get_rand_qkv()
+
+    mask = torch.zeros(amd.batch_size, amd.n_head, amd.l_x, amd.l_z)
+    # create padding mask
+    mask[0, 0, 1, 1:] = float(
+        "-inf"
+    )  # Mask out key positions > 1 for batch 0, head 0, query 1
+
+    result = batch_multi_head_attention(queries, keys, values, mask=mask)
+
+    # PyTorch expects mask with True for positions that will participate in attention
+    pt_mask = mask != float("-inf")
+
+    expected = scaled_dot_product_attention(
+        queries, keys, values, attn_mask=pt_mask, dropout_p=0.0, is_causal=False
+    )
+
+    assert result["output"].shape == expected.shape
+    assert torch.allclose(result["output"], expected, atol=1e-5)
+
+
 def test_against_pytorch_spda_causal_mask():
-    amd = AttentionMockData(n_head=2)
+    amd = AttentionMockData(batch_size=3, n_head=2)
     queries, keys, values = amd.get_rand_qkv()
 
     bool_mask = torch.ones(amd.l_x, amd.l_z).tril().to(dtype=torch.bool)

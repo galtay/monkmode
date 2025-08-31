@@ -29,12 +29,13 @@ def test_masked_position_has_zero_attention():
     values = values[ib, ih, :, :]
 
     mask = torch.zeros(amd.l_z)
-    mask[2] = float("-inf")  # mask out position 2
+    ik_mask = 2  # prevent attention at position ik_mask
+    mask[ik_mask] = float("-inf")
 
     result = single_query_attention(query, keys, values, mask)
 
-    # Check that attention at position 2 is ~0
-    assert torch.isclose(result["attn"][2], torch.tensor(0.0), atol=1e-6)
+    # Check that attention at position ik_mask is ~0
+    assert torch.isclose(result["attn"][ik_mask], torch.tensor(0.0), atol=1e-6)
 
 
 def test_uniform_scores_gives_uniform_attention():

@@ -31,10 +31,15 @@ def test_masked_position_has_zero_attention():
     values = values[ib, ih, :, :]
 
     mask = torch.zeros(amd.l_x, amd.l_z)
-    mask[0, 2] = float("-inf")  # Mask out position 2 for query 0
+    # mask out attention from query iq_mask to key ik_mask
+    iq_mask = 0
+    ik_mask = 2
+    mask[iq_mask, ik_mask] = float("-inf")
 
     result = single_head_attention(queries, keys, values, mask)
-    assert torch.allclose(result["attn"][0, 2], torch.tensor(0.0), atol=1e-6)
+    assert torch.allclose(
+        result["attn"][iq_mask, ik_mask], torch.tensor(0.0), atol=1e-6
+    )
 
 
 def test_uniform_scores_give_uniform_attention():
@@ -66,7 +71,7 @@ def test_fully_masked_query_raises_error():
         single_head_attention(queries, keys, values, mask=mask)
 
 
-def test_against_pytorch_scaled_dot_product_attention():
+def test_against_pytorch_sdpa():
     amd = AttentionMockData()
     queries, keys, values = amd.get_rand_qkv()
     ib, ih = 0, 0  # Batch, Head
@@ -88,7 +93,7 @@ def test_against_pytorch_scaled_dot_product_attention():
     assert torch.allclose(result["output"], expected, atol=1e-5)
 
 
-def test_against_pytorch_scaled_dot_product_attention_with_mask():
+def test_against_pytorch_sdpa_with_mask():
     amd = AttentionMockData()
     queries, keys, values = amd.get_rand_qkv()
     ib, ih = 0, 0  # Batch, Head
@@ -98,7 +103,7 @@ def test_against_pytorch_scaled_dot_product_attention_with_mask():
 
     mask = torch.zeros(amd.l_x, amd.l_z)
     # create padding mask
-    mask[1, 1:] = float("-inf")  # Mask out positions > 1 for query 1
+    mask[1, 1:] = float("-inf")  # Mask out key positions > 1 for query 1
 
     result = single_head_attention(q_flat, k_flat, v_flat, mask=mask)
 
