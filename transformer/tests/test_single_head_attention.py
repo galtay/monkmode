@@ -16,7 +16,7 @@ def test_attn_sums_to_one():
     values = values[ib, ih, :, :]
 
     result = single_head_attention(queries, keys, values)
-    row_sums = result["attn"].sum(dim=1)
+    row_sums = result["attn"].sum(dim=-1)
     expected = torch.ones(amd.l_x)
     assert row_sums.shape == expected.shape
     assert torch.allclose(row_sums, torch.ones(amd.l_x), atol=1e-5)
@@ -74,13 +74,40 @@ def test_against_pytorch_scaled_dot_product_attention():
     k_flat = keys[ib, ih, :, :]
     v_flat = values[ib, ih, :, :]
 
-    # Call your implementation
     result = single_head_attention(q_flat, k_flat, v_flat)
 
-    # Call PyTorch reference
     expected = (
         scaled_dot_product_attention(
             queries, keys, values, dropout_p=0.0, is_causal=False
+        )
+        .squeeze(0)
+        .squeeze(0)
+    )  # remove batch and head dims
+
+    assert result["output"].shape == expected.shape
+    assert torch.allclose(result["output"], expected, atol=1e-5)
+
+
+def test_against_pytorch_scaled_dot_product_attention_with_mask():
+    amd = AttentionMockData()
+    queries, keys, values = amd.get_rand_qkv()
+    ib, ih = 0, 0  # Batch, Head
+    q_flat = queries[ib, ih, :, :]
+    k_flat = keys[ib, ih, :, :]
+    v_flat = values[ib, ih, :, :]
+
+    mask = torch.zeros(amd.l_x, amd.l_z)
+    # create padding mask
+    mask[1, 1:] = float("-inf")  # Mask out positions > 1 for query 1
+
+    result = single_head_attention(q_flat, k_flat, v_flat, mask=mask)
+
+    # PyTorch expects mask with True for positions that will participate in attention
+    pt_mask = mask != float("-inf")
+
+    expected = (
+        scaled_dot_product_attention(
+            queries, keys, values, attn_mask=pt_mask, dropout_p=0.0, is_causal=False
         )
         .squeeze(0)
         .squeeze(0)
