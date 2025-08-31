@@ -7,8 +7,8 @@ from tests.utils import AttentionMockData
 
 
 def test_attn_sums_to_one():
-    atc = AttentionMockData()
-    queries, keys, values = atc.get_rand_qkv()
+    amd = AttentionMockData()
+    queries, keys, values = amd.get_rand_qkv()
     ib, ih, iq = 0, 0, 0  # Batch, Head, Query index
     query = queries[ib, ih, iq, :]
     keys = keys[ib, ih, :, :]
@@ -21,14 +21,14 @@ def test_attn_sums_to_one():
 
 
 def test_masked_position_has_zero_attention():
-    atc = AttentionMockData()
-    queries, keys, values = atc.get_rand_qkv()
+    amd = AttentionMockData()
+    queries, keys, values = amd.get_rand_qkv()
     ib, ih, iq = 0, 0, 0  # Batch, Head, Query index
     query = queries[ib, ih, iq, :]
     keys = keys[ib, ih, :, :]
     values = values[ib, ih, :, :]
 
-    mask = torch.zeros(atc.l_z)
+    mask = torch.zeros(amd.l_z)
     mask[2] = float("-inf")  # mask out position 2
 
     result = single_query_attention(query, keys, values, mask)
@@ -38,8 +38,8 @@ def test_masked_position_has_zero_attention():
 
 
 def test_uniform_scores_gives_uniform_attention():
-    atc = AttentionMockData()
-    queries, keys, values = atc.get_const_qk()
+    amd = AttentionMockData()
+    queries, keys, values = amd.get_const_qk()
     ib, ih, iq = 0, 0, 0  # Batch, Head, Query index
     query = queries[ib, ih, iq, :]
     keys = keys[ib, ih, :, :]
@@ -47,19 +47,19 @@ def test_uniform_scores_gives_uniform_attention():
 
     result = single_query_attention(query, keys, values)
 
-    expected = torch.full((atc.l_z,), 1.0 / atc.l_z)
+    expected = torch.full((amd.l_z,), 1.0 / amd.l_z)
     assert result["attn"].shape == expected.shape
     assert torch.allclose(result["attn"], expected, atol=1e-5)
 
 
 def test_all_positions_masked_raises_error():
-    atc = AttentionMockData()
-    queries, keys, values = atc.get_rand_qkv()
+    amd = AttentionMockData()
+    queries, keys, values = amd.get_rand_qkv()
     ib, ih, iq = 0, 0, 0  # Batch, Head, Query index
     query = queries[ib, ih, iq, :]
     keys = keys[ib, ih, :, :]
     values = values[ib, ih, :, :]
-    mask = torch.full((atc.l_z,), float("-inf"))
+    mask = torch.full((amd.l_z,), float("-inf"))
 
     with pytest.raises(FullyMaskedQueryError):
         single_query_attention(query, keys, values, mask=mask)

@@ -8,48 +8,48 @@ from tests.utils import AttentionMockData
 
 
 def test_attn_sums_to_one():
-    atc = AttentionMockData(n_head=2)
-    queries, keys, values = atc.get_rand_qkv()
+    amd = AttentionMockData(batch_size=3, n_head=2)
+    queries, keys, values = amd.get_rand_qkv()
 
     result = batch_multi_head_attention(queries, keys, values)
     row_sums = result["attn"].sum(dim=-1)
-    assert row_sums.shape == (atc.batch_size, atc.n_head, atc.l_x)
+    assert row_sums.shape == (amd.batch_size, amd.n_head, amd.l_x)
     assert torch.allclose(row_sums, torch.ones_like(row_sums), atol=1e-5)
 
 
 def test_masked_position_has_zero_attention():
-    atc = AttentionMockData(n_head=2)
-    queries, keys, values = atc.get_rand_qkv()
+    amd = AttentionMockData(n_head=2)
+    queries, keys, values = amd.get_rand_qkv()
 
-    mask = torch.zeros((atc.batch_size, atc.n_head, atc.l_x, atc.l_z))
+    mask = torch.zeros((amd.batch_size, amd.n_head, amd.l_x, amd.l_z))
     mask[0, 0, 0, 2] = float("-inf")
     result = batch_multi_head_attention(queries, keys, values, mask=mask)
     assert torch.allclose(result["attn"][0, 0, 0, 2], torch.tensor(0.0), atol=1e-6)
 
 
 def test_uniform_scores_give_uniform_attention():
-    atc = AttentionMockData(n_head=2)
-    queries, keys, values = atc.get_const_qk()
+    amd = AttentionMockData(n_head=2)
+    queries, keys, values = amd.get_const_qk()
 
     result = batch_multi_head_attention(queries, keys, values)
-    expected = torch.full((atc.batch_size, atc.n_head, atc.l_x, atc.l_z), 1.0 / atc.l_z)
+    expected = torch.full((amd.batch_size, amd.n_head, amd.l_x, amd.l_z), 1.0 / amd.l_z)
     assert result["attn"].shape == expected.shape
     assert torch.allclose(result["attn"], expected, atol=1e-5)
 
 
 def test_fully_masked_query_raises_error():
-    atc = AttentionMockData(n_head=2)
-    queries, keys, values = atc.get_rand_qkv()
+    amd = AttentionMockData(n_head=2)
+    queries, keys, values = amd.get_rand_qkv()
 
-    mask = torch.zeros((atc.batch_size, atc.n_head, atc.l_x, atc.l_z))
+    mask = torch.zeros((amd.batch_size, amd.n_head, amd.l_x, amd.l_z))
     mask[0, 0, 1, :] = float("-inf")
     with pytest.raises(FullyMaskedQueryError):
         batch_multi_head_attention(queries, keys, values, mask=mask)
 
 
 def test_against_pytorch_sdpa():
-    atc = AttentionMockData(n_head=2)
-    queries, keys, values = atc.get_rand_qkv()
+    amd = AttentionMockData(n_head=2)
+    queries, keys, values = amd.get_rand_qkv()
 
     result = batch_multi_head_attention(queries, keys, values)
 
@@ -62,11 +62,11 @@ def test_against_pytorch_sdpa():
 
 
 def test_against_pytorch_spda_causal_mask():
-    atc = AttentionMockData(n_head=2)
-    queries, keys, values = atc.get_rand_qkv()
+    amd = AttentionMockData(n_head=2)
+    queries, keys, values = amd.get_rand_qkv()
 
-    bool_mask = torch.ones(atc.l_x, atc.l_z).tril().to(dtype=torch.bool)
-    bool_mask = bool_mask.expand(atc.batch_size, atc.n_head, -1, -1)
+    bool_mask = torch.ones(amd.l_x, amd.l_z).tril().to(dtype=torch.bool)
+    bool_mask = bool_mask.expand(amd.batch_size, amd.n_head, -1, -1)
     additive_mask = torch.zeros_like(bool_mask, dtype=torch.float)
     additive_mask.masked_fill_(~bool_mask, float("-inf"))
 
