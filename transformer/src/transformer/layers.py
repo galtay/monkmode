@@ -34,7 +34,7 @@ def single_query_attention(
             scores = (query @ keys.T) / sqrt(d_attn)
             if mask is provided:
                 scores += mask
-            attn = softmax(scores, dim=0)
+            attn = softmax(scores, dim=-1)
             output = attn @ values
 
         Softmax is applied over the key positions (l_z).
@@ -69,10 +69,10 @@ def single_query_attention(
     if mask is not None:
         assert mask.shape == (l_z,)
         if torch.isneginf(mask).all():
-            raise FullyMaskedQueryError("Mask fully excludes all positions.")
+            raise FullyMaskedQueryError("Some queries are fully masked.")
         scores = scores + mask
 
-    attn = torch.softmax(scores, dim=0)
+    attn = torch.softmax(scores, dim=-1)
     assert attn.shape == (l_z,)
 
     output = attn @ values
@@ -113,7 +113,7 @@ def single_head_attention(
             scores = (queries @ keys.T) / sqrt(d_attn)
             if mask is provided:
                 scores += mask
-            attn = softmax(scores, dim=1)
+            attn = softmax(scores, dim=-1)
             output = attn @ values
 
         Softmax is applied row-wise over the context dimension (keys).
@@ -157,14 +157,12 @@ def single_head_attention(
 
     if mask is not None:
         assert mask.shape == (l_x, l_z)
-        fully_masked_rows = torch.isneginf(mask).all(dim=1)
-        if fully_masked_rows.any():
-            raise FullyMaskedQueryError(
-                f"{fully_masked_rows.sum().item()} queries are fully masked."
-            )
+        fully_masked = torch.isneginf(mask).all(dim=-1).any(dim=-1)
+        if fully_masked.any():
+            raise FullyMaskedQueryError("Some queries are fully masked.")
         scores = scores + mask
 
-    attn = torch.softmax(scores, dim=1)
+    attn = torch.softmax(scores, dim=-1)
     assert attn.shape == (l_x, l_z)
 
     output = attn @ values
