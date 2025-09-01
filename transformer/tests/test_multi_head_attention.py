@@ -37,7 +37,7 @@ def test_masked_position_has_zero_attention():
 
 def test_uniform_scores_give_uniform_attention():
     amd = AttentionMockData(n_head=2)
-    queries, keys, values = amd.get_const_qk()
+    queries, keys, values = amd.get_repeated_qk()
     ib = 0  # Batch
     queries = queries[ib, :, :, :]
     keys = keys[ib, :, :, :]

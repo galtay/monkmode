@@ -3,7 +3,7 @@ import torch
 
 
 class AttentionMockData(BaseModel):
-    """Configuration for single query attention.
+    """Create mock data for testing attention functions.
 
     d_attn should be evenly divisible by n_head
     """
@@ -18,25 +18,65 @@ class AttentionMockData(BaseModel):
     d_out: int = Field(7, description="Dimension of output vectors (values).")
     batch_size: int = Field(1, description="Batch size for queries, keys, and values.")
     n_head: int = Field(1, description="Number of attention heads.")
+    seed: int = Field(3937, description="Random seed for reproducibility.")
 
-    def get_rand_qkv(self):
-        shape_q = (self.batch_size, self.n_head, self.l_x, self.d_attn)
-        shape_k = (self.batch_size, self.n_head, self.l_z, self.d_attn)
-        shape_v = (self.batch_size, self.n_head, self.l_z, self.d_out)
+    def _get_generator(self):
+        return torch.Generator().manual_seed(self.seed)
 
-        queries = torch.randn(*shape_q)
-        keys = torch.randn(*shape_k)
-        values = torch.randn(*shape_v)
+    def _get_q_shape(self):
+        return (self.batch_size, self.n_head, self.l_x, self.d_attn)
+
+    def _get_k_shape(self):
+        return (self.batch_size, self.n_head, self.l_z, self.d_attn)
+
+    def _get_v_shape(self):
+        return (self.batch_size, self.n_head, self.l_z, self.d_out)
+
+    def get_rand_qkv(
+        self,
+        *,
+        device: str = "cpu",
+        dtype: torch.dtype = torch.float32,
+    ):
+        """Returns random queries, keys, and values."""
+        generator = self._get_generator()
+        queries = torch.randn(
+            *self._get_q_shape(), device=device, dtype=dtype, generator=generator
+        )
+        keys = torch.randn(
+            *self._get_k_shape(), device=device, dtype=dtype, generator=generator
+        )
+        values = torch.randn(
+            *self._get_v_shape(), device=device, dtype=dtype, generator=generator
+        )
         return queries, keys, values
 
-    def get_const_qk(self):
+    def get_repeated_qk(
+        self,
+        *,
+        device: str = "cpu",
+        dtype: torch.dtype = torch.float32,
+    ):
         """Returns constant queries/keys for uniform attention testing."""
-        q_vec = torch.randn(self.d_attn).view(1, 1, 1, -1)
-        k_vec = torch.randn(self.d_attn).view(1, 1, 1, -1)
+        generator = self._get_generator()
+
+        # Create one random q and one random k vector
+        query = torch.randn(
+            self.d_attn, device=device, dtype=dtype, generator=generator
+        )
+        key = torch.randn(self.d_attn, device=device, dtype=dtype, generator=generator)
 
         # Repeat to shape: (batch_size, n_head, seq_len, d_attn)
-        queries = q_vec.repeat(self.batch_size, self.n_head, self.l_x, 1)
-        keys = k_vec.repeat(self.batch_size, self.n_head, self.l_z, 1)
-        values = torch.randn(self.batch_size, self.n_head, self.l_z, self.d_out)
+        queries = query.view(1, 1, 1, -1).repeat(
+            self.batch_size, self.n_head, self.l_x, 1
+        )
+        keys = key.view(1, 1, 1, -1).repeat(self.batch_size, self.n_head, self.l_z, 1)
+        # use random values
+        values = torch.randn(
+            *self._get_v_shape(),
+            device=device,
+            dtype=dtype,
+            generator=generator,
+        )
 
         return queries, keys, values

@@ -29,7 +29,7 @@ def test_masked_position_has_zero_attention():
 
 def test_uniform_scores_give_uniform_attention():
     amd = AttentionMockData(batch_size=3, n_head=2)
-    queries, keys, values = amd.get_const_qk()
+    queries, keys, values = amd.get_repeated_qk()
 
     result = batch_multi_head_attention(queries, keys, values)
     expected = torch.full((amd.batch_size, amd.n_head, amd.l_x, amd.l_z), 1.0 / amd.l_z)

@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "einops>=0.8.1",
     "ipython>=9.4.0",
     "numpy>=2.3.2",
     "pydantic>=2.11.7",
@@ -12,6 +13,7 @@ dependencies = [
     "rich>=14.1.0",
     "ruff>=0.12.7",
     "torch>=2.7.1",
+    "torchtune>=0.6.1",
 ]
 
 [project.scripts]

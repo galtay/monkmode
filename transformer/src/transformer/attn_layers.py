@@ -9,17 +9,21 @@ def single_query_attention(
     query: torch.Tensor,
     keys: torch.Tensor,
     values: torch.Tensor,
-    mask: torch.Tensor = None,
+    *,
+    attn_mask: torch.Tensor | None = None,
+    scale: float | None = None,
 ):
     """Single query attention.
 
     Args:
-        query (d_attn): a single query vector.
-        keys (l_z, d_attn): a sequence of key vectors.
-        values (l_z, d_out): a sequence of value vectors.
-        mask (l_z,): optional:
-            Additive attention mask. 0 for valid positions, -inf for masked.
-            Applied to scores before softmax.
+        query: Tensor of shape (d_attn,). A single query.
+        keys: Tensor of shape (l_z, d_attn). A sequence of keys.
+        values: Tensor of shape (l_z, d_out). A sequence of values.
+        attn_mask: Optional tensor of shape (l_z,).
+            Boolean or additive attention mask. If boolean, attention is allowed where True.
+            If not boolean, attn_mask is added to scores before softmax.
+        scale: Optional float.
+            Scaling factor for attention. Default value is 1/sqrt(d_attn).
 
     Returns:
         dict:
@@ -29,9 +33,9 @@ def single_query_attention(
 
 
     Description:
-        Computes scaled dot-product attention for a single query vector.
+        Computes scaled dot-product attention for a single query.
 
-            scores = (query @ keys.T) / sqrt(d_attn)
+            scores = (query @ keys.T) * scale
             if mask is provided:
                 scores += mask
             attn = softmax(scores, dim=-1)
@@ -44,7 +48,7 @@ def single_query_attention(
         l_z = number of keys (context length)
         m = l_z - 1
 
-        The scores and attn tensors have shape (l_z,) and looks like:
+        The scores and attn tensors have shape (l_z,) and look like:
 
             |  k_0  |  k_1  |   ...  |  k_m  |
             ----------------------------------
@@ -55,22 +59,30 @@ def single_query_attention(
     assert query.dim() == 1
     d_attn = query.shape[0]
 
-    assert keys.dim() == 2
+    assert keys.dim() == 2 and keys.shape[1] == d_attn
     l_z = keys.shape[0]
-    assert keys.shape[1] == d_attn
 
-    assert values.dim() == 2
-    assert values.shape[0] == l_z
+    assert values.dim() == 2 and values.shape[0] == l_z
     d_out = values.shape[1]
 
-    scores = query @ keys.T / math.sqrt(d_attn)
-    assert scores.shape == (l_z,)
+    if scale is None:
+        scale = 1.0 / math.sqrt(d_attn)
 
-    if mask is not None:
-        assert mask.shape == (l_z,)
-        if torch.isneginf(mask).all():
-            raise FullyMaskedQueryError("Some queries are fully masked.")
-        scores = scores + mask
+    scores = query @ keys.T * scale
+    assert scores.shape == (l_z,)
+    neg_inf = float("-inf")
+
+    if attn_mask is not None:
+        assert attn_mask.shape == (l_z,)
+
+        if attn_mask.dtype == torch.bool:
+            if (~attn_mask).all():
+                raise FullyMaskedQueryError("The query is fully masked.")
+            scores = scores.masked_fill(~attn_mask, neg_inf)
+        else:
+            scores = scores + attn_mask.to(dtype=scores.dtype, device=scores.device)
+            if not scores.isfinite().any():
+                raise FullyMaskedQueryError("The query is fully masked.")
 
     attn = torch.softmax(scores, dim=-1)
     assert attn.shape == (l_z,)
@@ -212,7 +224,7 @@ def multi_head_attention(
     # einsum 2-d matrix multiplication is ik,kj -> ij
     # transposed matrix multiplication is ik,jk -> ij
 
-    scores = torch.einsum("nqd,nkd->nqk", queries, keys) / math.sqrt(d_attn)
+    scores = torch.einsum("nqd, nkd -> nqk", queries, keys) / math.sqrt(d_attn)
     assert scores.shape == (n_head, l_x, l_z)
 
     if mask is not None:
