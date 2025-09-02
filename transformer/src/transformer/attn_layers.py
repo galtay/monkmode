@@ -182,53 +182,65 @@ def multi_head_attention(
     queries: torch.Tensor,
     keys: torch.Tensor,
     values: torch.Tensor,
-    mask: torch.Tensor = None,
+    *,
+    attn_mask: torch.Tensor | None = None,
+    scale: float | None = None,
 ):
     """Multi-head attention.
 
     Args:
-        queries: (n_head, l_x, d_attn)
-        keys:    (n_head, l_z, d_attn)
-        values:  (n_head, l_z, d_out)
-        mask:    (n_head, l_x, l_z), optional additive mask
+        queries: Tensor of shape (n_head, l_x, d_attn). A sequence of queries.
+        keys: Tensor of shape (n_head, l_z, d_attn). A sequence of keys.
+        values: Tensor of shape (n_head, l_z, d_out). A sequence of values.
+        attn_mask: Optional tensor broadcastable to shape (n_head, l_x, l_z).
+            Boolean or additive attention mask. If boolean, attention is allowed where True.
+            If not boolean, attn_mask is added to scores before softmax.
+        scale: Optional float.
+            Scaling factor for attention. Default value is 1/sqrt(d_attn).
 
     Returns:
         dict:
-            * scores: (n_head, l_x, l_z)
-            * attn:   (n_head, l_x, l_z)
-            * output: (n_head, l_x, d_out)
+            * scores: Tensor of shape (n_head, l_x, l_z). Attention scores (pre softmax)
+            * attn: Tensor of shape (n_head, l_x, l_z). Attention weights (post softmax)
+            * output: Tensor of shape (n_head, l_x, d_out). Attention-weighted output tensor
 
     """
     assert queries.dim() == 3
     n_head, l_x, d_attn = queries.shape
 
-    assert keys.dim() == 3
-    assert keys.shape[0] == n_head
+    assert keys.dim() == 3 and keys.shape[0] == n_head and keys.shape[2] == d_attn
     l_z = keys.shape[1]
-    assert keys.shape[2] == d_attn
 
-    assert values.dim() == 3
-    assert values.shape[0] == n_head
-    assert values.shape[1] == l_z
+    assert values.dim() == 3 and values.shape[0] == n_head and values.shape[1] == l_z
     d_out = values.shape[2]
 
     # einsum 2-d matrix multiplication is ik,kj -> ij
     # transposed matrix multiplication is ik,jk -> ij
 
-    scores = torch.einsum("nqd, nkd -> nqk", queries, keys) / math.sqrt(d_attn)
-    assert scores.shape == (n_head, l_x, l_z)
+    if scale is None:
+        scale = 1.0 / math.sqrt(d_attn)
+    scale = float(scale)
 
-    if mask is not None:
-        assert mask.shape == (n_head, l_x, l_z)
-        fully_masked = torch.isneginf(mask).all(dim=-1).any(dim=-1)
-        if fully_masked.any():
-            raise FullyMaskedQueryError("Some queries are fully masked.")
-        scores += mask
+    scores = torch.einsum("nqd, nkd -> nqk", queries, keys) * scale
+    assert scores.shape == (n_head, l_x, l_z)
+    neg_inf = float("-inf")
+
+    if attn_mask is not None:
+        assert attn_mask.shape == (n_head, l_x, l_z)
+
+        if attn_mask.dtype == torch.bool:
+            if (~attn_mask).all(dim=-1).any():
+                raise FullyMaskedQueryError("Some queries are fully masked.")
+            scores = scores.masked_fill(~attn_mask, neg_inf)
+        else:
+            scores = scores + attn_mask.to(dtype=scores.dtype, device=scores.device)
+            if scores.isneginf().all(dim=-1).any():
+                raise FullyMaskedQueryError("Some queries are fully masked.")
 
     attn = torch.softmax(scores, dim=-1)
     assert attn.shape == (n_head, l_x, l_z)
 
-    output = torch.einsum("nqk,nkd->nqd", attn, values)
+    output = torch.einsum("nqk, nkd -> nqd", attn, values)
     assert output.shape == (n_head, l_x, d_out)
 
     return {

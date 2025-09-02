@@ -96,6 +96,7 @@ def test_additive_masked_position_has_zero_attention(device: str, dtype: torch.d
         atol=1e-6,
     )
 
+
 @pytest.mark.parametrize("device", get_devices())
 @pytest.mark.parametrize("dtype", get_dtypes())
 def test_boolean_masked_position_has_zero_attention(device: str, dtype: torch.dtype):
@@ -162,9 +163,7 @@ def test_against_pytorch_sdpa(device: str, dtype: torch.dtype):
     result = single_head_attention(q_slice, k_slice, v_slice)
 
     expected = (
-        scaled_dot_product_attention(queries, keys, values)
-        .squeeze(0)
-        .squeeze(0)
+        scaled_dot_product_attention(queries, keys, values).squeeze(0).squeeze(0)
     )  # remove batch and head dims
 
     assert result["output"].shape == expected.shape

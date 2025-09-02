@@ -112,6 +112,7 @@ def test_boolean_masked_position_has_zero_attention(device: str, dtype: torch.dt
         atol=1e-6,
     )
 
+
 @pytest.mark.parametrize("device", get_devices())
 @pytest.mark.parametrize("dtype", get_dtypes())
 def test_all_positions_additive_masked_raises_error(device: str, dtype: torch.dtype):
@@ -124,6 +125,7 @@ def test_all_positions_additive_masked_raises_error(device: str, dtype: torch.dt
     with pytest.raises(FullyMaskedQueryError):
         single_query_attention(q_slice, k_slice, v_slice, attn_mask=attn_mask)
 
+
 @pytest.mark.parametrize("device", get_devices())
 @pytest.mark.parametrize("dtype", get_dtypes())
 def test_all_positions_boolean_masked_raises_error(device: str, dtype: torch.dtype):
@@ -135,6 +137,3 @@ def test_all_positions_boolean_masked_raises_error(device: str, dtype: torch.dty
     attn_mask = torch.zeros(amd.l_z, device=device, dtype=torch.bool)
     with pytest.raises(FullyMaskedQueryError):
         single_query_attention(q_slice, k_slice, v_slice, attn_mask=attn_mask)
-
-
-
