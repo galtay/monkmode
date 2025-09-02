@@ -1,5 +1,33 @@
 from pydantic import BaseModel, Field
+import pytest
 import torch
+
+
+def ensure_supported(device: str, dtype: torch.dtype):
+    """
+    Try a tiny softmax on (device, dtype). Skip if unsupported.
+    This covers kernels and dtype/device support differences across backends.
+    """
+    try:
+        x = torch.zeros(4, dtype=dtype, device=device)
+        torch.softmax(x, dim=-1)
+    except (RuntimeError, TypeError, ValueError) as e:
+        pytest.skip(f"{dtype} not supported on {device}: {e}")
+
+
+def get_devices():
+    """Get available devices for testing."""
+    devices = ["cpu"]
+    if torch.cuda.is_available():
+        devices.append("cuda")
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        devices.append("mps")
+    return devices
+
+
+def get_dtypes():
+    """Get data types for testing."""
+    return [torch.float32]
 
 
 class AttentionMockData(BaseModel):
@@ -20,8 +48,8 @@ class AttentionMockData(BaseModel):
     n_head: int = Field(1, description="Number of attention heads.")
     seed: int = Field(3937, description="Random seed for reproducibility.")
 
-    def _get_generator(self):
-        return torch.Generator().manual_seed(self.seed)
+    def _get_generator(self, device: str):
+        return torch.Generator(device=device).manual_seed(self.seed)
 
     def _get_q_shape(self):
         return (self.batch_size, self.n_head, self.l_x, self.d_attn)
@@ -39,7 +67,7 @@ class AttentionMockData(BaseModel):
         dtype: torch.dtype = torch.float32,
     ):
         """Returns random queries, keys, and values."""
-        generator = self._get_generator()
+        generator = self._get_generator(device=device)
         queries = torch.randn(
             *self._get_q_shape(), device=device, dtype=dtype, generator=generator
         )
@@ -58,7 +86,7 @@ class AttentionMockData(BaseModel):
         dtype: torch.dtype = torch.float32,
     ):
         """Returns constant queries/keys for uniform attention testing."""
-        generator = self._get_generator()
+        generator = self._get_generator(device=device)
 
         # Create one random q and one random k vector
         query = torch.randn(

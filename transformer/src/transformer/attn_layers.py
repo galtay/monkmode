@@ -27,24 +27,14 @@ def single_query_attention(
 
     Returns:
         dict:
-            * scores (l_z,): attention scores (pre softmax)
-            * attn (l_z,): attention weights (post softmax)
-            * output (d_out,): attention-weighted output vector
+            * scores: Tensor of shape (l_z,). Attention scores (pre softmax)
+            * attn: Tensor of shape (l_z,). Attention weights (post softmax)
+            * output: Tensor of shape (d_out,). Attention-weighted output tensor
 
 
-    Description:
-        Computes scaled dot-product attention for a single query.
+    Notation::
+        Computes scaled dot-product attention with one query.
 
-            scores = (query @ keys.T) * scale
-            if mask is provided:
-                scores += mask
-            attn = softmax(scores, dim=-1)
-            output = attn @ values
-
-        Softmax is applied over the key positions (l_z).
-        The output is a weighted sum of the value vectors.
-
-    Notation:
         l_z = number of keys (context length)
         m = l_z - 1
 
@@ -67,6 +57,7 @@ def single_query_attention(
 
     if scale is None:
         scale = 1.0 / math.sqrt(d_attn)
+    scale = float(scale)
 
     scores = query @ keys.T * scale
     assert scores.shape == (l_z,)
@@ -81,7 +72,7 @@ def single_query_attention(
             scores = scores.masked_fill(~attn_mask, neg_inf)
         else:
             scores = scores + attn_mask.to(dtype=scores.dtype, device=scores.device)
-            if not scores.isfinite().any():
+            if scores.isneginf().all():
                 raise FullyMaskedQueryError("The query is fully masked.")
 
     attn = torch.softmax(scores, dim=-1)
@@ -101,35 +92,27 @@ def single_head_attention(
     queries: torch.Tensor,
     keys: torch.Tensor,
     values: torch.Tensor,
-    mask: torch.Tensor = None,
+    *,
+    attn_mask: torch.Tensor | None = None,
+    scale: float | None = None,
 ):
     """Single-head attention.
 
     Args:
-        queries (l_x, d_attn): a sequence of query vectors.
-        keys (l_z, d_attn): a sequence of key vectors.
-        values (l_z, d_out): a sequence of value vectors.
-        mask (l_x, l_z): optional:
-            Additive attention mask. 0 for valid positions, -inf for masked.
-            Applied to scores before softmax.
+        queries: Tensor of shape (l_x, d_attn). A sequence of queries.
+        keys: Tensor of shape (l_z, d_attn). A sequence of keys.
+        values: Tensor of shape (l_z, d_out). A sequence of values.
+        attn_mask: Optional tensor of shape (l_x, l_z).
+            Boolean or additive attention mask. If boolean, attention is allowed where True.
+            If not boolean, attn_mask is added to scores before softmax.
+        scale: Optional float.
+            Scaling factor for attention. Default value is 1/sqrt(d_attn).
 
     Returns:
         dict:
-            * scores (l_x, l_z): attention scores (pre softmax)
-            * attn (l_x, l_z): attention tensor (post softmax)
-            * output (l_x, d_out): attention-weighted outputs
-
-    Description:
-        Computes scaled dot-product attention.
-
-            scores = (queries @ keys.T) / sqrt(d_attn)
-            if mask is provided:
-                scores += mask
-            attn = softmax(scores, dim=-1)
-            output = attn @ values
-
-        Softmax is applied row-wise over the context dimension (keys).
-        Each query attends to all keys in parallel.
+            * scores: Tensor of shape (l_x, l_z). Attention scores (pre softmax)
+            * attn: Tensor of shape (l_x, l_z). Attention weights (post softmax)
+            * output: Tensor of shape (l_x, d_out). Attention-weighted output tensor
 
     Notation:
         l_x = number of queries (primary length)
@@ -156,23 +139,31 @@ def single_head_attention(
     assert queries.dim() == 2
     l_x, d_attn = queries.shape
 
-    assert keys.dim() == 2
+    assert keys.dim() == 2 and keys.shape[1] == d_attn
     l_z = keys.shape[0]
-    assert keys.shape[1] == d_attn
 
-    assert values.dim() == 2
-    assert values.shape[0] == l_z
+    assert values.dim() == 2 and values.shape[0] == l_z
     d_out = values.shape[1]
 
-    scores = queries @ keys.T / math.sqrt(d_attn)
-    assert scores.shape == (l_x, l_z)
+    if scale is None:
+        scale = 1.0 / math.sqrt(d_attn)
+    scale = float(scale)
 
-    if mask is not None:
-        assert mask.shape == (l_x, l_z)
-        fully_masked = torch.isneginf(mask).all(dim=-1).any(dim=-1)
-        if fully_masked.any():
-            raise FullyMaskedQueryError("Some queries are fully masked.")
-        scores = scores + mask
+    scores = queries @ keys.T * scale
+    assert scores.shape == (l_x, l_z)
+    neg_inf = float("-inf")
+
+    if attn_mask is not None:
+        assert attn_mask.shape == (l_x, l_z)
+
+        if attn_mask.dtype == torch.bool:
+            if (~attn_mask).all(dim=-1).any():
+                raise FullyMaskedQueryError("Some queries are fully masked.")
+            scores = scores.masked_fill(~attn_mask, neg_inf)
+        else:
+            scores = scores + attn_mask.to(dtype=scores.dtype, device=scores.device)
+            if scores.isneginf().all(dim=-1).any():
+                raise FullyMaskedQueryError("Some queries are fully masked.")
 
     attn = torch.softmax(scores, dim=-1)
     assert attn.shape == (l_x, l_z)
